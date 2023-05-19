@@ -1,28 +1,20 @@
-use std::fs;
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+use election_counter::BLT_Format;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+    
+    #[arg(long)]
+    sheets: bool,
+}
 
 fn main() {
+    let cli = Cli::parse();
 
-    let raw_votes = fs::read_to_string("results.txt").expect("Could not read file");
-
+    let blt_info = BLT_Format::read_from_file(cli.file);
 }
-
-fn sheet_line_to_blt() -> String {
-    "".to_string()
-}
-
-fn vote_to_blt() {
-
-}
-
-fn is_vote_valid(vote: &str) -> bool {
-    let split = vote.split("	");
-}
-
-#[test]
-fn valid_vote() {
-    assert!(is_vote_valid("3	2	6	5	1	4"));
-    assert!(!is_vote_valid("6	5		3	1	2"));
-}
-// 1    2   3   4   5   6
-// 3	2	6	5	1	4
-// 5,2,1,6,4,3
