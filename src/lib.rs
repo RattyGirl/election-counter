@@ -13,6 +13,7 @@ pub struct BLT_Format {
     votes: Vec<Vote>,
     candidate_names: Vec<String>,
     election_name: String,
+
 }
 
 impl From<GoogleSheetFormat> for BLT_Format {
@@ -64,7 +65,7 @@ impl BLT_Format {
                     ballot.push(pref.parse::<u32>().unwrap());
                 }
                 votes.push(Vote {
-                    count,
+                    value: count,
                     preferences: ballot,
                 });
             } else {
@@ -86,12 +87,45 @@ impl BLT_Format {
         self.votes.iter_mut().for_each(|x| {
             x.clean();
         });
+        self.votes.retain(|x| x.preferences.len() > 0);
+    }
+
+    pub fn remove_withdrawals(&mut self) {
+        self.votes.iter_mut().for_each(|vote| {
+            vote.preferences = vote.preferences.iter().filter(|x| {
+                let y = *x;
+                !self.withdraws.contains(y)
+            }).map(|x| *x).collect();
+        });
+        self.cleanup();
+    }
+
+    pub fn info(&self) -> String {
+        let mut count = vec![0; self.can_count as usize];
+        self.votes.iter().for_each(|vote| {
+            let pref: usize = *vote.preferences.first().unwrap() as usize;
+            count[pref - 1] += vote.value;
+        });
+
+        let mut out: Vec<String> = Vec::new();
+
+        for i in 0..self.can_count {
+            out.push(
+                format!(
+                    "{}={}",
+                    self.candidate_names.get(i as usize).unwrap(),
+                    count.get(i as usize).unwrap()
+                ),
+            );
+        }
+        out.join("\n")
+
     }
 }
 
 #[derive(Debug, Clone)]
 struct Vote {
-    count: i32,
+    value: i32,
     preferences: Vec<u32>,
 }
 
@@ -155,7 +189,7 @@ impl GoogleSheetFormat {
                 }
 
                 votes.push(Vote {
-                    count,
+                    value: count,
                     preferences: ballot,
                 });
             } else {

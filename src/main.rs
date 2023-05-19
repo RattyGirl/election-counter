@@ -24,6 +24,17 @@ fn main() {
     stv(blt_info.clone());
 }
 
-fn stv(blt: BLT_Format) {
+fn stv(mut blt: BLT_Format) {
+    println!("{}", blt.info());
+    blt.remove_withdrawals();
+    println!("{}", blt.info());
+    stage(&blt);
+}
 
+fn stage(blt: &BLT_Format) {
+    //has max elected?
+
+    //can anyone be elected
+
+    //exclude
 }
