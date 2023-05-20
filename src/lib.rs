@@ -4,16 +4,18 @@ use std::{
     io::BufReader,
     path::PathBuf,
 };
+use rand::prelude::SliceRandom;
 
 #[derive(Debug, Clone)]
 pub struct BLT_Format {
-    can_count: u32,
+    pub can_count: u32,
     vacancies: u32,
     withdraws: Vec<u32>,
-    votes: Vec<Vote>,
+    total_cast: i32,
+    raw_votes: Vec<Vote>,
     candidate_names: Vec<String>,
     election_name: String,
-
+    can_votes: Vec<f32>,
 }
 
 impl From<GoogleSheetFormat> for BLT_Format {
@@ -22,14 +24,22 @@ impl From<GoogleSheetFormat> for BLT_Format {
             can_count: value.can_count,
             vacancies: value.vacancies,
             withdraws: Vec::new(),
-            votes: value.votes,
+            total_cast: value.votes.iter().map(|x| x.value).sum(),
+            raw_votes: value.votes,
             candidate_names: value.candidate_names,
             election_name: "".to_string(),
+            can_votes: vec![0.; value.can_count as usize],
         }
     }
 }
 
 impl BLT_Format {
+    pub fn get_to_blt(&self) {
+        for x in self.raw_votes.iter() {
+            println!("{}", x.preferences.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(" "));
+        }
+    }
+
     pub fn read_from_file(file: PathBuf) -> Self {
         let file = fs::read_to_string(file).unwrap();
         //assumes correct format
@@ -77,21 +87,23 @@ impl BLT_Format {
             can_count,
             vacancies,
             withdraws,
-            votes,
+            total_cast: votes.iter().map(|x| x.value).sum(),
+            raw_votes: votes,
             candidate_names: candidates,
             election_name: "".to_string(),
+            can_votes: vec![0.; can_count as usize],
         }
     }
 
     pub fn cleanup(&mut self) {
-        self.votes.iter_mut().for_each(|x| {
+        self.raw_votes.iter_mut().for_each(|x| {
             x.clean();
         });
-        self.votes.retain(|x| x.preferences.len() > 0);
+        self.raw_votes.retain(|x| x.preferences.len() > 0);
     }
 
     pub fn remove_withdrawals(&mut self) {
-        self.votes.iter_mut().for_each(|vote| {
+        self.raw_votes.iter_mut().for_each(|vote| {
             vote.preferences = vote.preferences.iter().filter(|x| {
                 let y = *x;
                 !self.withdraws.contains(y)
@@ -101,12 +113,6 @@ impl BLT_Format {
     }
 
     pub fn info(&self) -> String {
-        let mut count = vec![0; self.can_count as usize];
-        self.votes.iter().for_each(|vote| {
-            let pref: usize = *vote.preferences.first().unwrap() as usize;
-            count[pref - 1] += vote.value;
-        });
-
         let mut out: Vec<String> = Vec::new();
 
         for i in 0..self.can_count {
@@ -114,12 +120,44 @@ impl BLT_Format {
                 format!(
                     "{}={}",
                     self.candidate_names.get(i as usize).unwrap(),
-                    count.get(i as usize).unwrap()
+                    self.can_votes.get(i as usize).unwrap()
                 ),
             );
         }
         out.join("\n")
 
+    }
+
+    pub fn initial_count(&mut self) {
+        let mut count = vec![0; self.can_count as usize];
+        self.raw_votes.iter().for_each(|vote| {
+            let pref: usize = *vote.preferences.first().unwrap() as usize;
+            count[pref - 1] += vote.value;
+        });
+
+        let mut out: Vec<String> = Vec::new();
+
+        for i in 0..self.can_count {
+            let name = self.candidate_names.get(i as usize).unwrap();
+            let count = count.get(i as usize).unwrap();
+            self.can_votes[i as usize] = *count as f32;
+        }
+    }
+
+    pub fn get_quota(&self) -> f32 {
+        (((self.total_cast as f32)/(self.vacancies as f32 +1.0 as f32)) + 1.0).floor()
+    }
+
+    pub fn can_someone_be_elected(&self) -> Option<usize> {
+        let quota = self.get_quota();
+        let mut reached_quota: Vec<usize> = Vec::new();
+        for i in 0..self.can_votes.len() {
+            if self.can_votes[i] >= quota {
+                reached_quota.push(i);
+            }
+        }
+        //random one to eliminate
+        reached_quota.choose(&mut rand::thread_rng()).copied()
     }
 }
 
